@@ -4,7 +4,7 @@ import json
 from functools import wraps
 from telegram import Update
 from telegram import InlineQueryResultArticle, InputTextMessageContent, InlineQueryResultDocument, InlineQueryResultPhoto
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, InlineQueryHandler
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, InlineQueryHandler, PicklePersistence
 
 # It's good practice to enable logging to see errors and bot activity.
 logging.basicConfig(
@@ -16,31 +16,6 @@ logger = logging.getLogger(__name__)
 # It's more secure to load your token from an environment variable
 # than to hardcode it in your script.
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-
-# --- Persistent Storage for Notes ---
-NOTES_FILE = "notes.json"
-RULES_FILE = "rules.json"
-FILES_FILE = "user_files.json"
-USER_CACHE_FILE = "user_cache.json"
-
-
-def load_data(file_path):
-    """Loads data from a JSON file."""
-    try:
-        with open(file_path, 'r') as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
-
-def save_data(data, file_path):
-    """Saves data to a JSON file."""
-    with open(file_path, 'w') as f:
-        json.dump(data, f, indent=4)
-
-notes = load_data(NOTES_FILE)
-rules_data = load_data(RULES_FILE)
-user_files = load_data(FILES_FILE)
-user_cache = load_data(USER_CACHE_FILE)
 
 def admin_only(func):
     """
@@ -89,9 +64,10 @@ async def get_user_from_command(update: Update, context: ContextTypes.DEFAULT_TY
         if arg.startswith('@'):
             username = arg[1:].lower()
             chat_id = str(update.effective_chat.id)
-            if chat_id in user_cache and username in user_cache[chat_id]:
-                user_id = user_cache[chat_id][username]
-                # We can't get the user's full name here easily, so we'll use the username.
+            # Access user_cache from context.chat_data
+            user_cache = context.chat_data.get('user_cache', {})
+            if username in user_cache:
+                user_id = user_cache[username]
                 return int(user_id), arg
 
         # Case 4: The argument is a user ID
@@ -182,19 +158,22 @@ async def update_user_cache(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     user_id = str(update.effective_user.id)
     username = update.effective_user.username.lower()
 
-    if chat_id not in user_cache:
-        user_cache[chat_id] = {}
-    
-    user_cache[chat_id][username] = user_id
-    save_data(user_cache, USER_CACHE_FILE)
+    # context.chat_data is a dictionary unique to each chat.
+    # We'll store a 'user_cache' dictionary inside it.
+    if 'user_cache' not in context.chat_data:
+        context.chat_data['user_cache'] = {}
+
+    context.chat_data['user_cache'][username] = user_id
+
 async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     This function is a command handler for the /rules command.
     It sends the group rules to the chat.
     """
-    chat_id = str(update.effective_chat.id)
-    if chat_id in rules_data and rules_data[chat_id]:
-        rules_text = f"📜 **Group Rules** 📜\n\n{rules_data[chat_id]}"
+    # context.chat_data is a dictionary that persists for each chat.
+    # We get the 'rules' key from it.
+    if 'rules' in context.chat_data and context.chat_data['rules']:
+        rules_text = f"📜 **Group Rules** 📜\n\n{context.chat_data['rules']}"
         await update.message.reply_text(rules_text, parse_mode='MarkdownV2')
     else:
         await update.message.reply_text(
@@ -338,27 +317,25 @@ async def unban(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 @admin_only
 async def set_rules(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Sets the rules for the current chat."""
-    chat_id = str(update.effective_chat.id)
     if not context.args:
         await update.message.reply_text("Usage: /setrules <your rules text here>")
         return
 
     new_rules = " ".join(context.args)
-    rules_data[chat_id] = new_rules
-    save_data(rules_data, RULES_FILE)
+    context.chat_data['rules'] = new_rules # Store rules in the chat's persistent data
     await update.message.reply_text("Group rules have been updated!")
 
 @admin_only
 async def get_member_ids(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Lists the user IDs of all known members in the group from the cache."""
-    chat_id = str(update.effective_chat.id)
-    
-    if chat_id not in user_cache or not user_cache[chat_id]:
+    user_cache = context.chat_data.get('user_cache', {})
+
+    if not user_cache:
         await update.message.reply_text("The user cache for this group is empty. Users need to send a message for me to see them.")
         return
 
     message_lines = ["*Cached members in this group:*"]
-    for username, user_id in user_cache[chat_id].items():
+    for username, user_id in user_cache.items():
         message_lines.append(f"- `{username}`: `{user_id}`")
     
     message = "\n".join(message_lines)
@@ -372,7 +349,6 @@ async def get_member_ids(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 @admin_only
 async def save_note(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Saves a note. Usage: /save <notename> <text>"""
-    chat_id = str(update.effective_chat.id) # Use string for JSON keys
     if len(context.args) < 2:
         await update.message.reply_text("Usage: /save <notename> <text to save>")
         return
@@ -380,17 +356,14 @@ async def save_note(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     note_name = context.args[0].lower()
     note_text = " ".join(context.args[1:])
 
-    if chat_id not in notes:
-        notes[chat_id] = {}
-    
-    notes[chat_id][note_name] = note_text
-    save_data(notes, NOTES_FILE) # Save notes to file
+    if 'notes' not in context.chat_data:
+        context.chat_data['notes'] = {}
+
+    context.chat_data['notes'][note_name] = note_text
     await update.message.reply_text(f"Note `#{note_name}` saved!", parse_mode='MarkdownV2')
 
 async def get_note(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Gets a note. Usage: /get <notename> or #notename"""
-    chat_id = str(update.effective_chat.id) # Use string for JSON keys
-    
     # Determine note name from command or text
     if update.message.text.startswith('/'):
         if not context.args:
@@ -400,8 +373,10 @@ async def get_note(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     else: # Triggered by #notename
         note_name = update.message.text[1:].lower()
 
-    if chat_id in notes and note_name in notes[chat_id]:
-        await update.message.reply_text(notes[chat_id][note_name])
+    notes = context.chat_data.get('notes', {})
+
+    if note_name in notes:
+        await update.message.reply_text(notes[note_name])
     else:
         await update.message.reply_text(f"Note `#{note_name}` not found.", parse_mode='MarkdownV2')
 
@@ -415,7 +390,6 @@ async def save_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("Usage: /savefile <filename>")
         return
 
-    user_id = str(update.effective_user.id)
     file_name = context.args[0].lower()
     replied_message = update.message.reply_to_message
 
@@ -432,25 +406,26 @@ async def save_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("That file type is not supported for saving.")
         return
 
-    if user_id not in user_files:
-        user_files[user_id] = {}
+    # Use context.user_data for per-user persistent storage
+    if 'user_files' not in context.user_data:
+        context.user_data['user_files'] = {}
 
-    user_files[user_id][file_name] = {"file_id": file_id, "type": file_type}
-    save_data(user_files, FILES_FILE)
+    context.user_data['user_files'][file_name] = {"file_id": file_id, "type": file_type}
 
     await update.message.reply_text(f"File saved as `{file_name}`. You can find it inline by typing my username and `{file_name}`.", parse_mode='MarkdownV2')
 
 async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle the inline query. This is fired when a user types @botusername <query>"""
     query = update.inline_query.query
-    user_id = str(update.inline_query.from_user.id)
 
     if not query:
         return
 
     results = []
-    if user_id in user_files:
-        for file_name, file_data in user_files[user_id].items():
+    # Access user_data from the context provided by the InlineQueryHandler
+    user_files = context.user_data.get('user_files', {})
+    if user_files:
+        for file_name, file_data in user_files.items():
             if query.lower() in file_name:
                 file_id = file_data['file_id']
                 file_type = file_data['type']
@@ -475,8 +450,12 @@ def main() -> None:
     """
     This is the main function where the bot is set up and started.
     """
+    # --- Set up Persistence ---
+    # This will create a file named 'bot_persistence' to save data.
+    persistence = PicklePersistence(filepath="bot_persistence")
+
     # Create the Application and pass it your bot's token.
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).persistence(persistence).build()
 
     # --- Register Handlers ---
     # A CommandHandler is used to respond to Telegram commands (e.g., /start).
