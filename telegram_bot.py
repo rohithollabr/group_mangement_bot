@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 # --- Best Practice: Load Token from Environment Variable ---
 # It's more secure to load your token from an environment variable
-# than to hardcode it in your script.eg 1156839699:AAGy9zyIUzkftkbWRGowqxQmLpNsQsqtG5Y
+# than to hardcode it in your script.
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 
 # --- Persistent Storage for Notes ---
