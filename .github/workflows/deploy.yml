@@ -1,0 +1,35 @@
+name: Deploy to PythonAnywhere
+
+on:
+  push:
+    branches:
+      - main # Or 'master', depending on your default branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10' # Match the Python version you use on PythonAnywhere
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Deploy to PythonAnywhere
+        env:
+          PYTHONANYWHERE_API_TOKEN: ${{ secrets.PYTHONANYWHERE_API_TOKEN }}
+          PYTHONANYWHERE_USERNAME: ${{ secrets.PYTHONANYWHERE_USERNAME }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+        run: python scripts/deploy_to_pythonanywhere.py
+
+      - name: Verify Deployment
+        run: echo "Deployment script finished. Check PythonAnywhere for bot status."
