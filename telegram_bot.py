@@ -2,6 +2,7 @@ import logging
 import os
 import json
 from functools import wraps
+from dotenv import load_dotenv
 from telegram import Update
 from telegram import InlineQueryResultArticle, InputTextMessageContent, InlineQueryResultDocument, InlineQueryResultPhoto
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, InlineQueryHandler, PicklePersistence
@@ -15,7 +16,9 @@ logger = logging.getLogger(__name__)
 # --- Best Practice: Load Token from Environment Variable ---
 # It's more secure to load your token from an environment variable
 # than to hardcode it in your script.
+load_dotenv() # Load environment variables from .env file
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+
 
 def admin_only(func):
     """
