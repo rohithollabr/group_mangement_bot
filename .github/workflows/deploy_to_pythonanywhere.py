@@ -83,51 +83,8 @@ def deploy():
     # Give it a moment to run. In a real-world scenario, you might poll the console output.
     time.sleep(60) # Wait for unzip and pip install to finish
 
-    # --- 4. Find or Create the Always-on Task ---
-    always_on_url = f"https://www.pythonanywhere.com/api/v0/user/{username}/always_on/"
-    task_command = f"/home/{username}/.virtualenvs/telegram-bot-venv/bin/python {bot_script_path}"
-    task_description = "Telegram Group Management Bot"
-    
-    response = requests.get(always_on_url, headers=headers)
-    response.raise_for_status()
-    tasks = response.json()
-
-    task_id = None
-    for task in tasks:
-        if task['command'] == task_command:
-            task_id = task['id']
-            print(f"Found existing Always-on task with ID: {task_id}")
-            break
-
-    if task_id:
-        # Restart the existing task
-        restart_url = f"{always_on_url}{task_id}/restart/"
-        print(f"Restarting Always-on task ID: {task_id}...")
-        response = requests.post(restart_url, headers=headers)
-    else:
-        # Create a new task
-        print("No existing task found. Creating a new one...")
-        response = requests.post(
-            always_on_url,
-            headers=headers,
-            json={
-                "command": task_command,
-                "description": task_description,
-                "enabled": True,
-            }
-        )
-
-    if response.status_code in [200, 201]:
-        if task_id:
-            print("Bot restart command sent successfully!")
-        else:
-            new_task_id = response.json().get('id')
-            print(f"Successfully created and started new Always-on task with ID: {new_task_id}")
-        print("Deployment complete. Check your PythonAnywhere task logs for status.")
-    else:
-        action = "restart" if task_id else "create"
-        print(f"Failed to {action} task. Status: {response.status_code}, Response: {response.text}")
-        sys.exit(1)
+    print("Deployment script finished.")
+    print("Please go to your PythonAnywhere 'Tasks' page and reload your bot's task to apply the changes.")
 
 if __name__ == "__main__":
     deploy()
