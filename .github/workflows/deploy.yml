@@ -29,7 +29,7 @@ jobs:
           PYTHONANYWHERE_USERNAME: ${{ secrets.PYTHONANYWHERE_USERNAME }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           GITHUB_WORKSPACE: ${{ github.workspace }}
-        run: python scripts/deploy_to_pythonanywhere.py
+        run: python .github/workflows/deploy_to_pythonanywhere.py
 
       - name: Verify Deployment
         run: echo "Deployment script finished. Check PythonAnywhere for bot status."

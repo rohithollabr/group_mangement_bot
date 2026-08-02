@@ -64,7 +64,7 @@ def deploy():
     python_version = "python3.10"
     setup_command = (
         f"export TELEGRAM_BOT_TOKEN={shlex.quote(bot_token)} && "
-        f"{python_version} /home/{username}/{project_folder_name}/scripts/setup_on_pa.py"
+        f"{python_version} /home/{username}/{project_folder_name}/.github/workflows/setup_on_pa.py"
     )
 
     print("Starting a console on PythonAnywhere to run the setup script...")
